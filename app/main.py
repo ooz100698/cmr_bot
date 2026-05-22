@@ -15,6 +15,10 @@ from app.bot.handlers.onboarding import register_onboarding_handlers
 from app.bot.handlers.admin import register_admin_handlers
 from app.bot.handlers.general import register_general_handlers
 
+# ✅ DATABASE FIX (ADDED)
+from app.db.base import Base
+from app.db.session import engine
+
 load_dotenv()
 
 TOKEN       = os.getenv("BOT_TOKEN")
@@ -30,7 +34,12 @@ register_general_handlers(tg_app)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 🔥 FIX: Ensure DB tables exist before bot starts
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     await tg_app.initialize()
+
     if WEBHOOK_URL:
         webhook = f"{WEBHOOK_URL}/webhook"
         await tg_app.bot.set_webhook(webhook)
@@ -42,6 +51,7 @@ async def lifespan(app: FastAPI):
             target=lambda: loop.run_until_complete(tg_app.run_polling()),
             daemon=True
         ).start()
+
     yield
     await tg_app.shutdown()
 
