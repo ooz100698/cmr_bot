@@ -15,15 +15,15 @@ from app.bot.handlers.onboarding import register_onboarding_handlers
 from app.bot.handlers.admin import register_admin_handlers
 from app.bot.handlers.general import register_general_handlers
 
-# ✅ DATABASE FIX (ADDED)
+# ✅ DB core
 from app.db.base import Base
 from app.db.session import engine
 
 load_dotenv()
 
-TOKEN       = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT        = int(os.getenv("PORT", 8000))
+PORT = int(os.getenv("PORT", 8000))
 
 # Build telegram app
 tg_app = Application.builder().token(TOKEN).build()
@@ -34,7 +34,11 @@ register_general_handlers(tg_app)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 🔥 FIX: Ensure DB tables exist before bot starts
+
+    # 🔥 IMPORTANT: register models BEFORE create_all
+    import app.db.import_models  # ensures User model is loaded safely
+
+    # Create DB tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -62,9 +66,13 @@ app.include_router(admin_router)
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, tg_app.bot)
-    await tg_app.process_update(update)
+    try:
+        data = await request.json()
+        update = Update.de_json(data, tg_app.bot)
+        await tg_app.process_update(update)
+    except Exception as e:
+        print("WEBHOOK ERROR:", e)
+
     return Response(status_code=200)
 
 
